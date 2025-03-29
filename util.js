@@ -1,7 +1,18 @@
 const fs = require("fs");
 const path = require("path");
 
-// Check for filename patterns that may cause Jekyll parsing errors
+// Centralized configuration items
+const CONFIG = {
+  readmeFilename: "README.md",
+  sectionHeader: "## Jekyll-Safe File List\n",
+  markdownExtension: ".md",
+};
+
+/**
+ * Check if filename adheres to Jekyll safe naming rules
+ * @param {string} filename - The filename to check
+ * @returns {boolean} Whether it's safe
+ */
 const isJekyllSafeFilename = (filename) => {
   const unsafePatterns = [
     /:/, // Prohibit colons (causes URL scheme parsing errors)
@@ -12,57 +23,86 @@ const isJekyllSafeFilename = (filename) => {
   return !unsafePatterns.some((pattern) => pattern.test(filename));
 };
 
-// Get all Markdown files in current directory (excluding README.md)
+/**
+ * Get all safe Markdown files in the current directory
+ * @returns {string[]} Array of safe filenames
+ */
 const getAllSafeMarkdownFiles = () => {
-  const currentDir = process.cwd();
-  return fs.readdirSync(currentDir).filter((file) => {
-    const isMd = path.extname(file).toLowerCase() === ".md";
-    const isNotReadme = path.basename(file) !== "README.md";
-    const isSafe = isJekyllSafeFilename(file);
+  try {
+    const currentDir = process.cwd();
+    return fs.readdirSync(currentDir).filter((file) => {
+      const isMd = path.extname(file).toLowerCase() === CONFIG.markdownExtension;
+      const isNotReadme = path.basename(file) !== CONFIG.readmeFilename;
+      const isSafe = isJekyllSafeFilename(file);
 
-    if (isMd && !isSafe) {
-      console.warn(
-        `[Jekyll Warning] File "${file}" contains invalid characters that may cause parsing errors`
-      );
-    }
+      if (isMd && !isSafe) {
+        console.warn(
+          `[Jekyll Warning] File "${file}" contains invalid characters that may cause parsing errors`
+        );
+      }
 
-    return isMd && isNotReadme && isSafe;
-  });
+      return isMd && isNotReadme && isSafe;
+    });
+  } catch (error) {
+    console.error(`Error scanning directory: ${error.message}`);
+    return [];
+  }
 };
 
-// Generate Markdown hyperlink list (with safety indicators)
+/**
+ * Generate Markdown hyperlink list
+ * @param {string[]} files - Array of filenames
+ * @returns {string} Formatted Markdown link list
+ */
 const generateSafeLinks = (files) => {
   return files
     .map((file) => {
-      const fileName = path.basename(file, ".md");
-      const relativePath = path.relative(process.cwd(), file);
-      return `- [${fileName}](${encodeURI(relativePath)})`; // URL encoding for special characters
+      const fileName = path.basename(file, CONFIG.markdownExtension);
+      return `- [${fileName}](${encodeURI(file)})`;
     })
     .join("\n");
 };
 
-// Update README.md
+/**
+ * Update README.md file
+ */
 const updateReadme = () => {
-  const safeFiles = getAllSafeMarkdownFiles();
-  const links = generateSafeLinks(safeFiles);
+  try {
+    const safeFiles = getAllSafeMarkdownFiles();
+    
+    if (safeFiles.length === 0) {
+      console.log("No safe Markdown files found, README will not be updated.");
+      return;
+    }
+    
+    const links = generateSafeLinks(safeFiles);
+    const readmePath = path.join(process.cwd(), CONFIG.readmeFilename);
+    
+    let content = "";
+    try {
+      content = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, "utf8") : "";
+    } catch (error) {
+      console.error(`Error reading README: ${error.message}`);
+      content = "";
+    }
 
-  const readmePath = path.join(process.cwd(), "README.md");
-  let content = fs.existsSync(readmePath)
-    ? fs.readFileSync(readmePath, "utf8")
-    : "";
+    if (!content.includes(CONFIG.sectionHeader)) {
+      content += `\n${CONFIG.sectionHeader}${links}\n`;
+    } else {
+      // Use safer regex replacement
+      const escapedHeader = CONFIG.sectionHeader.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      content = content.replace(
+        new RegExp(`${escapedHeader}(.*?)(?=\n## |$)`, "s"),
+        `${CONFIG.sectionHeader}${links}\n`
+      );
+    }
 
-  const sectionHeader = "## Jekyll-Safe File List\n";
-  if (!content.includes(sectionHeader)) {
-    content += `\n${sectionHeader}${links}`;
-  } else {
-    content = content.replace(
-      new RegExp(`${sectionHeader}(.*?)(?=\n## |$)`, "s"),
-      `${sectionHeader}${links}`
-    );
+    fs.writeFileSync(readmePath, content);
+    console.log("Successfully updated safe file list in README");
+  } catch (error) {
+    console.error(`Error updating README: ${error.message}`);
   }
-
-  fs.writeFileSync(readmePath, content);
-  console.log("Updated safe file list, excluded potentially conflicting files");
 };
 
+// Execute update
 updateReadme();
