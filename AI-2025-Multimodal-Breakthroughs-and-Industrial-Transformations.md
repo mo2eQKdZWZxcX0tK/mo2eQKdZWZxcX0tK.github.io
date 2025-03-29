@@ -1,5 +1,5 @@
 **The New Frontiers of Artificial Intelligence: Breakthroughs, Implementations, and Transformative Applications (2024–2025)**  
-*By [Your Name], AI/ML Technical Writer*  
+*By Joshua Haun, AI/ML Technical Writer*  
 
 ---
 
